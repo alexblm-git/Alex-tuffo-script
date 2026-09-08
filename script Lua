@@ -1,0 +1,1362 @@
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local colors = {
+	bg = Color3.fromRGB(13, 24, 36),
+	panel = Color3.fromRGB(17, 31, 45),
+	panel2 = Color3.fromRGB(23, 42, 59),
+	border = Color3.fromRGB(54, 84, 105),
+	text = Color3.fromRGB(190, 205, 213),
+	dark = Color3.fromRGB(125, 151, 164),
+	tab = Color3.fromRGB(32, 67, 91),
+	button = Color3.fromRGB(20, 40, 54),
+	on = Color3.fromRGB(30, 82, 91),
+	slider = Color3.fromRGB(36, 66, 84),
+	fill = Color3.fromRGB(76, 151, 166),
+	knob = Color3.fromRGB(116, 194, 202),
+	red = Color3.fromRGB(190, 55, 55),
+	gold = Color3.fromRGB(238, 181, 42),
+}
+local character
+local humanoid
+local rootPart
+local state = {
+	flying = false,
+	noClip = false,
+	infiniteJump = false,
+	esp = false,
+	noFog = false,
+	optimization = false,
+	walkModifier = false,
+	flyModifier = false,
+	walkSpeed = 16,
+	flySpeed = 50,
+	espSize = 13,
+	menuVisible = true,
+}
+local keys = {
+	w = false,
+	s = false,
+	a = false,
+	d = false,
+	up = false,
+	down = false,
+}
+local flightConnection
+local noClipConnection
+local flightAttachment
+local flightVelocity
+local flightOrientation
+local savedCollision = {}
+local optimizedObjects = {}
+local espObjects = {}
+local espConnections = {}
+local controls = {}
+local function setupCharacter(newCharacter)
+	character = newCharacter
+	humanoid = character:WaitForChild("Humanoid")
+	rootPart = character:WaitForChild("HumanoidRootPart")
+	humanoid.WalkSpeed = state.walkModifier
+		and state.walkSpeed
+		or 16
+	if state.noClip then
+		for _, object in ipairs(character:GetDescendants()) do
+			if object:IsA("BasePart") then
+				object.CanCollide = false
+			end
+		end
+	end
+end
+setupCharacter(player.Character or player.CharacterAdded:Wait())
+-- GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "TungTungTungSahurHub"
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 20
+gui.Parent = playerGui
+local main = Instance.new("Frame")
+main.Size = UDim2.fromOffset(350, 450)
+main.Position = UDim2.new(0, 30, 0.5, -225)
+main.BackgroundColor3 = colors.bg
+main.BorderColor3 = colors.border
+main.BorderSizePixel = 1
+main.Parent = gui
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 36)
+title.BackgroundColor3 = colors.panel
+title.Text = "Tung Tung Tung Sahur hub"
+title.TextColor3 = colors.text
+title.TextSize = 14
+title.Font = Enum.Font.Code
+title.Parent = main
+local tabsFrame = Instance.new("Frame")
+tabsFrame.Size = UDim2.new(1, -12, 0, 28)
+tabsFrame.Position = UDim2.fromOffset(6, 42)
+tabsFrame.BackgroundTransparency = 1
+tabsFrame.Parent = main
+local content = Instance.new("Frame")
+content.Size = UDim2.new(1, -12, 1, -80)
+content.Position = UDim2.fromOffset(6, 76)
+content.BackgroundTransparency = 1
+content.Parent = main
+local pages = {}
+for i = 1, 4 do
+	local page = Instance.new("Frame")
+	page.Size = UDim2.fromScale(1, 1)
+	page.BackgroundTransparency = 1
+	page.Visible = i == 1
+	page.Parent = content
+	pages[i] = page
+end
+local function tab(text, x)
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.fromOffset(78, 26)
+	button.Position = UDim2.fromOffset(x, 0)
+	button.BackgroundColor3 = colors.button
+	button.BorderColor3 = colors.border
+	button.Text = text
+	button.TextColor3 = colors.dark
+	button.TextSize = 12
+	button.Font = Enum.Font.Code
+	button.Parent = tabsFrame
+	return button
+end
+local tabButtons = {
+	tab("Main", 0),
+	tab("Visuals", 82),
+	tab("Misc", 164),
+	tab("Jogos", 246),
+}
+tabButtons[1].BackgroundColor3 = colors.tab
+tabButtons[1].TextColor3 = colors.text
+local function section(parent, text, y)
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 0, 20)
+	label.Position = UDim2.fromOffset(0, y)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = colors.text
+	label.TextSize = 13
+	label.Font = Enum.Font.Code
+	label.Parent = parent
+	local line = Instance.new("Frame")
+	line.Size = UDim2.new(1, 0, 0, 2)
+	line.Position = UDim2.fromOffset(0, y + 21)
+	line.BackgroundColor3 = Color3.fromRGB(35, 93, 180)
+	line.BorderSizePixel = 0
+	line.Parent = parent
+end
+local function interactive(object)
+	table.insert(controls, object)
+	return object
+end
+local function toggle(parent, text, y)
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.new(1, 0, 0, 30)
+	button.Position = UDim2.fromOffset(0, y)
+	button.BackgroundColor3 = colors.button
+	button.BorderColor3 = colors.border
+	button.Text = text .. "  [OFF]"
+	button.TextColor3 = colors.text
+	button.TextSize = 12
+	button.Font = Enum.Font.Code
+	button.TextXAlignment = Enum.TextXAlignment.Left
+	button.Parent = parent
+	interactive(button)
+	return button
+end
+local function setToggle(button, text, enabled)
+	button.Text = text .. "  [" .. (enabled and "ON" or "OFF") .. "]"
+	button.BackgroundColor3 = enabled and colors.on or colors.button
+	button.TextColor3 = enabled and colors.knob or colors.text
+end
+local function slider(parent, text, minimum, maximum, value, y, callback)
+	local box = Instance.new("Frame")
+	box.Size = UDim2.new(1, 0, 0, 61)
+	box.Position = UDim2.fromOffset(0, y)
+	box.BackgroundTransparency = 1
+	box.Parent = parent
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 0, 20)
+	label.BackgroundTransparency = 1
+	label.Text = text .. ": " .. value
+	label.TextColor3 = colors.text
+	label.TextSize = 12
+	label.Font = Enum.Font.Code
+	label.Parent = box
+	local bar = Instance.new("Frame")
+	bar.Size = UDim2.new(1, 0, 0, 8)
+	bar.Position = UDim2.fromOffset(0, 25)
+	bar.BackgroundColor3 = colors.slider
+	bar.BorderColor3 = colors.border
+	bar.Parent = box
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.new((value - minimum) / (maximum - minimum), 0, 1, 0)
+	fill.BackgroundColor3 = colors.fill
+	fill.Parent = bar
+	local knob = Instance.new("TextButton")
+	knob.Size = UDim2.fromOffset(14, 14)
+	knob.AnchorPoint = Vector2.new(0.5, 0.5)
+	knob.Position = UDim2.new(
+		(value - minimum) / (maximum - minimum),
+		0,
+		0.5,
+		0
+	)
+	knob.BackgroundColor3 = colors.knob
+	knob.BorderColor3 = colors.border
+	knob.Text = ""
+	knob.Parent = bar
+	interactive(box)
+	interactive(bar)
+	interactive(knob)
+	local dragging = false
+	local function update(mouseX)
+		local percentage = math.clamp(
+			(mouseX - bar.AbsolutePosition.X) / bar.AbsoluteSize.X,
+			0,
+			1
+		)
+		local newValue = math.floor(
+			minimum + (maximum - minimum) * percentage + 0.5
+		)
+		fill.Size = UDim2.new(percentage, 0, 1, 0)
+		knob.Position = UDim2.new(percentage, 0, 0.5, 0)
+		label.Text = text .. ": " .. newValue
+		callback(newValue)
+	end
+	bar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			update(input.Position.X)
+		end
+	end)
+	knob.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+		end
+	end)
+	UIS.InputChanged:Connect(function(input)
+		if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+			update(input.Position.X)
+		end
+	end)
+	UIS.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = false
+		end
+	end)
+	return box
+end
+-- Main
+section(pages[1], "Movement", 0)
+local walkToggle = toggle(pages[1], "Walk speed modifier", 30)
+local walkSlider = slider(
+	pages[1],
+	"Walk speed 1-150",
+	1,
+	150,
+	state.walkSpeed,
+	66,
+	function(value)
+		state.walkSpeed = value
+	end
+)
+local flyToggle = toggle(pages[1], "Fly", 66)
+local flyModifierToggle = toggle(pages[1], "Fly speed modifier", 102)
+local flySlider = slider(
+	pages[1],
+	"Fly speed 1-300",
+	1,
+	300,
+	state.flySpeed,
+	138,
+	function(value)
+		state.flySpeed = value
+	end
+)
+local noClipToggle = toggle(pages[1], "No clip", 138)
+local infiniteJumpToggle = toggle(pages[1], "Infinite jump", 174)
+walkSlider.Visible = false
+flySlider.Visible = false
+local function updateMainLayout()
+	local y = 30
+	walkToggle.Position = UDim2.fromOffset(0, y)
+	y += 36
+	if state.walkModifier then
+		walkSlider.Visible = true
+		walkSlider.Position = UDim2.fromOffset(0, y)
+		y += 67
+	else
+		walkSlider.Visible = false
+	end
+	flyToggle.Position = UDim2.fromOffset(0, y)
+	y += 36
+	flyModifierToggle.Position = UDim2.fromOffset(0, y)
+	y += 36
+	if state.flying and state.flyModifier then
+		flySlider.Visible = true
+		flySlider.Position = UDim2.fromOffset(0, y)
+		y += 67
+	else
+		flySlider.Visible = false
+	end
+	noClipToggle.Position = UDim2.fromOffset(0, y)
+	infiniteJumpToggle.Position = UDim2.fromOffset(0, y + 36)
+end
+updateMainLayout()
+-- Visuals
+section(pages[2], "Visuals", 0)
+local espToggle = toggle(pages[2], "Player ESP", 30)
+slider(
+	pages[2],
+	"ESP text size 8-24",
+	8,
+	24,
+	state.espSize,
+	74,
+	function(value)
+		state.espSize = value
+	end
+)
+-- Misc
+section(pages[3], "Variados", 0)
+local noFogToggle = toggle(pages[3], "No Fog", 30)
+local optimizationToggle = toggle(pages[3], "Otimização de jogo", 66)
+local playerTpBox = Instance.new("TextBox")
+playerTpBox.Size = UDim2.new(1, 0, 0, 30)
+playerTpBox.Position = UDim2.fromOffset(0, 102)
+playerTpBox.BackgroundColor3 = colors.button
+playerTpBox.BorderColor3 = colors.border
+playerTpBox.BorderSizePixel = 1
+playerTpBox.PlaceholderText = "Username do jogador"
+playerTpBox.PlaceholderColor3 = colors.dark
+playerTpBox.Text = ""
+playerTpBox.TextColor3 = colors.text
+playerTpBox.TextSize = 12
+playerTpBox.Font = Enum.Font.Code
+playerTpBox.ClearTextOnFocus = false
+playerTpBox.Parent = pages[3]
+interactive(playerTpBox)
+local playerTpButton = toggle(pages[3], "Player TP", 138)
+local playerTpStatus = Instance.new("TextLabel")
+playerTpStatus.Size = UDim2.new(1, 0, 0, 24)
+playerTpStatus.Position = UDim2.fromOffset(0, 174)
+playerTpStatus.BackgroundTransparency = 1
+playerTpStatus.Text = ""
+playerTpStatus.TextColor3 = colors.dark
+playerTpStatus.TextSize = 11
+playerTpStatus.Font = Enum.Font.Code
+playerTpStatus.TextXAlignment = Enum.TextXAlignment.Left
+playerTpStatus.Parent = pages[3]
+local function findPlayerForTeleport(query)
+    local normalized = string.lower(string.gsub(query, "^%s*(.-)%s*$", "%1"))
+    if normalized == "" then
+        return nil
+    end
+    for _, targetPlayer in ipairs(Players:GetPlayers()) do
+        if string.lower(targetPlayer.Name) == normalized
+            or string.lower(targetPlayer.DisplayName) == normalized then
+            return targetPlayer
+        end
+    end
+    for _, targetPlayer in ipairs(Players:GetPlayers()) do
+        if string.sub(string.lower(targetPlayer.Name), 1, #normalized) == normalized then
+            return targetPlayer
+        end
+    end
+    return nil
+end
+playerTpButton.MouseButton1Click:Connect(function()
+    local targetPlayer = findPlayerForTeleport(playerTpBox.Text)
+    local targetCharacter = targetPlayer and targetPlayer.Character
+    local targetRoot = targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart")
+    if not targetPlayer then
+        playerTpStatus.Text = "Jogador não encontrado."
+        playerTpStatus.TextColor3 = colors.red
+        return
+    end
+    if not rootPart or not targetRoot then
+        playerTpStatus.Text = "O personagem ainda não está carregado."
+        playerTpStatus.TextColor3 = colors.red
+        return
+    end
+    rootPart.CFrame = targetRoot.CFrame + Vector3.new(0, 3, 0)
+    playerTpStatus.Text = "Teleportado para " .. targetPlayer.Name .. "."
+    playerTpStatus.TextColor3 = colors.knob
+end)
+-- Jogos
+section(pages[4], "Jogos", 0)
+local hunterToggle = toggle(pages[4], "Tung the hunter", 30)
+local snakeToggle = toggle(pages[4], "Snake", 66)
+local tetrisToggle = toggle(pages[4], "Tetris", 102)
+hunterToggle.Text = "Tung the hunter  [OPEN]"
+snakeToggle.Text = "Snake  [OPEN]"
+tetrisToggle.Text = "Tetris  [OPEN]"
+-- Tabs
+local function selectPage(index)
+	for pageIndex, page in ipairs(pages) do
+		page.Visible = pageIndex == index
+	end
+	for _, button in ipairs(tabButtons) do
+		button.BackgroundColor3 = colors.button
+		button.TextColor3 = colors.dark
+	end
+	tabButtons[index].BackgroundColor3 = colors.tab
+	tabButtons[index].TextColor3 = colors.text
+end
+for index, button in ipairs(tabButtons) do
+	button.MouseButton1Click:Connect(function()
+		selectPage(index)
+	end)
+end
+-- Arrastar
+local draggingMenu = false
+local dragStart
+local menuStart
+local function clickedControl(position)
+	for _, object in ipairs(playerGui:GetGuiObjectsAtPosition(position.X, position.Y)) do
+		for _, control in ipairs(controls) do
+			if object == control or object:IsDescendantOf(control) then
+				return true
+			end
+		end
+	end
+	return false
+end
+main.InputBegan:Connect(function(input)
+	if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+		return
+	end
+	if clickedControl(input.Position) then
+		return
+	end
+	draggingMenu = true
+	dragStart = input.Position
+	menuStart = main.Position
+end)
+UIS.InputChanged:Connect(function(input)
+	if draggingMenu and input.UserInputType == Enum.UserInputType.MouseMovement then
+		local difference = input.Position - dragStart
+		main.Position = UDim2.new(
+			menuStart.X.Scale,
+			menuStart.X.Offset + difference.X,
+			menuStart.Y.Scale,
+			menuStart.Y.Offset + difference.Y
+		)
+	end
+end)
+UIS.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		draggingMenu = false
+	end
+end)
+-- Walk speed
+walkToggle.MouseButton1Click:Connect(function()
+	state.walkModifier = not state.walkModifier
+	setToggle(walkToggle, "Walk speed modifier", state.walkModifier)
+	updateMainLayout()
+end)
+-- Fly speed modifier
+flyModifierToggle.MouseButton1Click:Connect(function()
+	state.flyModifier = not state.flyModifier
+	setToggle(flyModifierToggle, "Fly speed modifier", state.flyModifier)
+	updateMainLayout()
+end)
+-- No Clip
+local function startNoClip()
+	if noClipConnection then
+		noClipConnection:Disconnect()
+	end
+	noClipConnection = RunService.Stepped:Connect(function()
+		if not state.noClip or not character then
+			return
+		end
+		for _, object in ipairs(character:GetDescendants()) do
+			if object:IsA("BasePart") then
+				object.CanCollide = false
+			end
+		end
+	end)
+end
+local function stopNoClip()
+	if noClipConnection then
+		noClipConnection:Disconnect()
+		noClipConnection = nil
+	end
+	for part, value in pairs(savedCollision) do
+		if part and part.Parent then
+			part.CanCollide = value
+		end
+	end
+	table.clear(savedCollision)
+end
+noClipToggle.MouseButton1Click:Connect(function()
+	state.noClip = not state.noClip
+	if state.noClip then
+		table.clear(savedCollision)
+		for _, object in ipairs(character:GetDescendants()) do
+			if object:IsA("BasePart") then
+				savedCollision[object] = object.CanCollide
+				object.CanCollide = false
+			end
+		end
+		startNoClip()
+	else
+		stopNoClip()
+	end
+	setToggle(noClipToggle, "No clip", state.noClip)
+end)
+-- Infinite jump
+infiniteJumpToggle.MouseButton1Click:Connect(function()
+	state.infiniteJump = not state.infiniteJump
+	setToggle(infiniteJumpToggle, "Infinite jump", state.infiniteJump)
+end)
+-- Fly
+local function stopFlying()
+	state.flying = false
+	if flightConnection then
+		flightConnection:Disconnect()
+		flightConnection = nil
+	end
+	for _, object in ipairs({
+		flightVelocity,
+		flightOrientation,
+		flightAttachment,
+	}) do
+		if object then
+			object:Destroy()
+		end
+	end
+	flightVelocity = nil
+	flightOrientation = nil
+	flightAttachment = nil
+	if humanoid then
+		humanoid.PlatformStand = false
+		humanoid.AutoRotate = true
+	end
+	setToggle(flyToggle, "Fly", false)
+	updateMainLayout()
+end
+local function startFlying()
+	if not humanoid or not rootPart then
+		return
+	end
+	state.flying = true
+	humanoid.PlatformStand = true
+	humanoid.AutoRotate = false
+	flightAttachment = Instance.new("Attachment")
+	flightAttachment.Parent = rootPart
+	flightVelocity = Instance.new("LinearVelocity")
+	flightVelocity.Attachment0 = flightAttachment
+	flightVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+	flightVelocity.MaxForce = math.huge
+	flightVelocity.VectorVelocity = Vector3.zero
+	flightVelocity.Parent = rootPart
+	flightOrientation = Instance.new("AlignOrientation")
+	flightOrientation.Attachment0 = flightAttachment
+	flightOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	flightOrientation.MaxTorque = math.huge
+	flightOrientation.Responsiveness = 100
+	flightOrientation.RigidityEnabled = true
+	flightOrientation.Parent = rootPart
+	setToggle(flyToggle, "Fly", true)
+	updateMainLayout()
+	flightConnection = RunService.RenderStepped:Connect(function()
+		if not state.flying or not rootPart.Parent then
+			return
+		end
+		local camera = workspace.CurrentCamera
+		local direction = Vector3.zero
+		if keys.w then
+			direction += camera.CFrame.LookVector
+		end
+		if keys.s then
+			direction -= camera.CFrame.LookVector
+		end
+		if keys.d then
+			direction += camera.CFrame.RightVector
+		end
+		if keys.a then
+			direction -= camera.CFrame.RightVector
+		end
+		if keys.up then
+			direction += Vector3.yAxis
+		end
+		if keys.down then
+			direction -= Vector3.yAxis
+		end
+		if direction.Magnitude > 0 then
+			direction = direction.Unit
+		end
+		local speed = state.flyModifier
+			and math.clamp(state.flySpeed, 1, 300)
+			or 50
+		flightVelocity.VectorVelocity = direction * speed
+		flightOrientation.CFrame = camera.CFrame.Rotation
+		rootPart.AssemblyAngularVelocity = Vector3.zero
+	end)
+end
+flyToggle.MouseButton1Click:Connect(function()
+	if state.flying then
+		stopFlying()
+	else
+		startFlying()
+	end
+end)
+-- No Fog
+local fogStart = Lighting.FogStart
+local fogEnd = Lighting.FogEnd
+local brightness = Lighting.Brightness
+local atmosphereValues = {}
+noFogToggle.MouseButton1Click:Connect(function()
+	state.noFog = not state.noFog
+	if state.noFog then
+		Lighting.FogStart = 0
+		Lighting.FogEnd = 100000
+		Lighting.Brightness = math.max(Lighting.Brightness, 2)
+		table.clear(atmosphereValues)
+		for _, object in ipairs(Lighting:GetChildren()) do
+			if object:IsA("Atmosphere") then
+				atmosphereValues[object] = {
+					Density = object.Density,
+					Haze = object.Haze,
+					Glare = object.Glare,
+				}
+				object.Density = 0
+				object.Haze = 0
+				object.Glare = 0
+			end
+		end
+	else
+		Lighting.FogStart = fogStart
+		Lighting.FogEnd = fogEnd
+		Lighting.Brightness = brightness
+		for object, values in pairs(atmosphereValues) do
+			if object.Parent then
+				object.Density = values.Density
+				object.Haze = values.Haze
+				object.Glare = values.Glare
+			end
+		end
+	end
+	setToggle(noFogToggle, "No Fog", state.noFog)
+end)
+-- Otimização
+local function optimize(object)
+	if optimizedObjects[object] then
+		return
+	end
+	if object:IsA("Decal") or object:IsA("Texture") then
+		optimizedObjects[object] = {
+			property = "Transparency",
+			value = object.Transparency,
+		}
+		object.Transparency = 1
+	elseif object:IsA("ParticleEmitter")
+		or object:IsA("Trail")
+		or object:IsA("Beam")
+		or object:IsA("PostEffect") then
+		optimizedObjects[object] = {
+			property = "Enabled",
+			value = object.Enabled,
+		}
+		object.Enabled = false
+	end
+end
+optimizationToggle.MouseButton1Click:Connect(function()
+	state.optimization = not state.optimization
+	if state.optimization then
+		for _, object in ipairs(workspace:GetDescendants()) do
+			optimize(object)
+		end
+		for _, object in ipairs(Lighting:GetChildren()) do
+			optimize(object)
+		end
+	else
+		for object, data in pairs(optimizedObjects) do
+			if object.Parent then
+				object[data.property] = data.value
+			end
+		end
+		table.clear(optimizedObjects)
+	end
+	setToggle(
+		optimizationToggle,
+		"Otimização de jogo",
+		state.optimization
+	)
+end)
+workspace.DescendantAdded:Connect(function(object)
+	if state.optimization then
+		task.defer(optimize, object)
+	end
+end)
+-- ESP
+local function removeESP(targetPlayer)
+	if espConnections[targetPlayer] then
+		espConnections[targetPlayer]:Disconnect()
+		espConnections[targetPlayer] = nil
+	end
+	if espObjects[targetPlayer] then
+		espObjects[targetPlayer]:Destroy()
+		espObjects[targetPlayer] = nil
+	end
+end
+local function createESP(targetPlayer)
+	if targetPlayer == player or not state.esp then
+		return
+	end
+	removeESP(targetPlayer)
+	local targetCharacter = targetPlayer.Character
+	local head = targetCharacter and targetCharacter:FindFirstChild("Head")
+	if not head then
+		return
+	end
+	local billboard = Instance.new("BillboardGui")
+	billboard.Size = UDim2.fromOffset(220, 70)
+	billboard.StudsOffset = Vector3.new(0, 3, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Adornee = head
+	billboard.Parent = head
+	local username = Instance.new("TextLabel")
+	username.Size = UDim2.new(1, 0, 0.5, 0)
+	username.BackgroundTransparency = 1
+	username.Text = targetPlayer.Name
+	username.TextColor3 = colors.knob
+	username.TextStrokeTransparency = 0
+	username.TextSize = state.espSize
+	username.Font = Enum.Font.Code
+	username.Parent = billboard
+	local distance = username:Clone()
+	distance.Position = UDim2.fromScale(0, 0.5)
+	distance.Text = "0 studs"
+	distance.TextColor3 = colors.text
+	distance.Parent = billboard
+	espObjects[targetPlayer] = billboard
+	espConnections[targetPlayer] = RunService.RenderStepped:Connect(function()
+		if not state.esp or not billboard.Parent or not head.Parent then
+			removeESP(targetPlayer)
+			return
+		end
+		local studs = rootPart
+			and math.floor((rootPart.Position - head.Position).Magnitude + 0.5)
+			or 0
+		username.TextSize = state.espSize
+		distance.TextSize = state.espSize
+		distance.Text = studs .. " studs"
+	end)
+end
+local function refreshESP()
+	for targetPlayer in pairs(espObjects) do
+		removeESP(targetPlayer)
+	end
+	if not state.esp then
+		return
+	end
+	for _, targetPlayer in ipairs(Players:GetPlayers()) do
+		if targetPlayer ~= player then
+			createESP(targetPlayer)
+		end
+	end
+end
+espToggle.MouseButton1Click:Connect(function()
+	state.esp = not state.esp
+	setToggle(espToggle, "Player ESP", state.esp)
+	refreshESP()
+end)
+Players.PlayerAdded:Connect(function(targetPlayer)
+	targetPlayer.CharacterAdded:Connect(function()
+		task.wait(0.5)
+		if state.esp then
+			createESP(targetPlayer)
+		end
+	end)
+end)
+Players.PlayerRemoving:Connect(removeESP)
+-- Jogos
+local activeGame
+local activeWindow
+local activeConnection
+local function closeGame()
+	if activeConnection then
+		activeConnection:Disconnect()
+		activeConnection = nil
+	end
+	if activeWindow then
+		activeWindow:Destroy()
+		activeWindow = nil
+	end
+	activeGame = nil
+end
+local function createGameWindow(name, width, height)
+	closeGame()
+	activeGame = name
+	local window = Instance.new("Frame")
+	window.Size = UDim2.fromOffset(width, height)
+	window.Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2)
+	window.BackgroundColor3 = colors.bg
+	window.BorderColor3 = colors.border
+	window.BorderSizePixel = 1
+	window.ZIndex = 100
+	window.Parent = gui
+	activeWindow = window
+	local heading = Instance.new("TextLabel")
+	heading.Size = UDim2.new(1, -50, 0, 38)
+	heading.Position = UDim2.fromOffset(10, 0)
+	heading.BackgroundTransparency = 1
+	heading.Text = name
+	heading.TextColor3 = colors.text
+	heading.TextSize = 18
+	heading.Font = Enum.Font.Code
+	heading.ZIndex = 101
+	heading.Parent = window
+	local close = Instance.new("TextButton")
+	close.Size = UDim2.fromOffset(32, 26)
+	close.Position = UDim2.new(1, -40, 0, 6)
+	close.BackgroundColor3 = colors.button
+	close.BorderColor3 = colors.border
+	close.Text = "X"
+	close.TextColor3 = colors.text
+	close.TextSize = 14
+	close.Font = Enum.Font.Code
+	close.ZIndex = 102
+	close.Parent = window
+	close.MouseButton1Click:Connect(closeGame)
+	return window
+end
+local function cell(parent, x, y, size, color)
+	local object = Instance.new("Frame")
+	object.Size = UDim2.fromOffset(size - 1, size - 1)
+	object.Position = UDim2.fromOffset((x - 1) * size, (y - 1) * size)
+	object.BackgroundColor3 = color
+	object.BorderColor3 = colors.border
+	object.ZIndex = 110
+	object.Parent = parent
+	return object
+end
+-- Hunter
+local shark = [[
+       /\
+  ____/  \____
+ /            \
+<    o    o    >
+ \____    ____/
+      \__/
+     /|  |\
+ ___/ |  | \___
+    __/  \__
+]]
+local function openHunter()
+	local window = createGameWindow("Tung the hunter", 620, 390)
+	local area = Instance.new("Frame")
+	area.Size = UDim2.new(1, -24, 1, -58)
+	area.Position = UDim2.fromOffset(12, 47)
+	area.BackgroundColor3 = colors.panel
+	area.ClipsDescendants = true
+	area.ZIndex = 103
+	area.Parent = window
+	local sahur = Instance.new("TextLabel")
+	sahur.Size = UDim2.new(0.31, 0, 1, 0)
+	sahur.BackgroundColor3 = colors.panel2
+	sahur.Text = "TUNG TUNG\nSAHUR\n\n  O\n /|\\\n / \\\n\n |===="
+	sahur.TextColor3 = colors.gold
+	sahur.TextSize = 24
+	sahur.Font = Enum.Font.Code
+	sahur.ZIndex = 104
+	sahur.Parent = area
+	local scoreLabel = Instance.new("TextLabel")
+	scoreLabel.Size = UDim2.fromOffset(180, 30)
+	scoreLabel.Position = UDim2.new(0.35, 0, 0, 12)
+	scoreLabel.BackgroundTransparency = 1
+	scoreLabel.TextColor3 = colors.gold
+	scoreLabel.TextSize = 17
+	scoreLabel.Font = Enum.Font.Code
+	scoreLabel.ZIndex = 104
+	scoreLabel.Parent = area
+	local line = Instance.new("Frame")
+	line.Size = UDim2.new(0.63, 0, 0, 3)
+	line.Position = UDim2.new(0.34, 0, 0, 250)
+	line.BackgroundColor3 = colors.red
+	line.ZIndex = 104
+	line.Parent = area
+	local attack = Instance.new("TextButton")
+	attack.Size = UDim2.fromOffset(130, 58)
+	attack.Position = UDim2.new(0.68, 0, 0.55, 0)
+	attack.BackgroundColor3 = colors.button
+	attack.BorderColor3 = colors.border
+	attack.Text = "ATTACK"
+	attack.TextColor3 = colors.text
+	attack.TextSize = 19
+	attack.Font = Enum.Font.Code
+	attack.ZIndex = 104
+	attack.Parent = area
+	local enemy
+	local enemyY = -90
+	local enemySpeed = 115
+	local golden = false
+	local score = 0
+	local timer = 0
+	local last = os.clock()
+	local function spawn()
+		if enemy then
+			enemy:Destroy()
+		end
+		golden = math.random(1, 20) == 1
+		enemy = Instance.new("TextLabel")
+		enemy.Size = UDim2.fromOffset(150, 82)
+		enemy.Position = UDim2.new(0.68, 0, 0, -90)
+		enemy.BackgroundTransparency = 1
+		enemy.Text = shark
+		enemy.TextColor3 = golden and colors.gold or colors.text
+		enemy.TextStrokeTransparency = 0
+		enemy.TextSize = 10
+		enemy.Font = Enum.Font.Code
+		enemy.ZIndex = 115
+		enemy.Parent = area
+		enemyY = -90
+		enemySpeed = golden and 145 or 115
+	end
+	attack.MouseButton1Click:Connect(function()
+		if not enemy then
+			return
+		end
+		local top = enemyY
+		local bottom = enemyY + enemy.AbsoluteSize.Y
+		if bottom >= 250 and top <= 253 then
+			score += golden and 200 or 25
+			enemy:Destroy()
+			enemy = nil
+		end
+	end)
+	activeConnection = RunService.RenderStepped:Connect(function()
+		local now = os.clock()
+		local delta = math.clamp(now - last, 0, 0.1)
+		last = now
+		timer += delta
+		if not enemy and timer >= 0.8 then
+			timer = 0
+			spawn()
+		end
+		if enemy then
+			enemyY += enemySpeed * delta
+			enemy.Position = UDim2.new(0.68, 0, 0, enemyY)
+			if enemyY > 253 then
+				score -= 5
+				enemy:Destroy()
+				enemy = nil
+			end
+		end
+		scoreLabel.Text = "Score: " .. score .. " / 1000"
+		if score >= 1000 then
+			if activeConnection then
+				activeConnection:Disconnect()
+				activeConnection = nil
+			end
+			local win = Instance.new("TextButton")
+			win.Size = UDim2.fromScale(1, 1)
+			win.BackgroundColor3 = colors.bg
+			win.Text = "YOU WIN\n\nFECHAR"
+			win.TextColor3 = colors.gold
+			win.TextSize = 32
+			win.Font = Enum.Font.GothamBold
+			win.ZIndex = 200
+			win.Parent = window
+			win.MouseButton1Click:Connect(closeGame)
+		end
+	end)
+end
+-- Snake
+local function openSnake()
+	local window = createGameWindow("Snake", 460, 470)
+	local board = Instance.new("Frame")
+	board.Size = UDim2.fromOffset(360, 360)
+	board.Position = UDim2.fromOffset(15, 55)
+	board.BackgroundColor3 = colors.bg
+	board.ClipsDescendants = true
+	board.ZIndex = 103
+	board.Parent = window
+	local scoreLabel = Instance.new("TextLabel")
+	scoreLabel.Size = UDim2.fromOffset(150, 30)
+	scoreLabel.Position = UDim2.fromOffset(200, 10)
+	scoreLabel.BackgroundTransparency = 1
+	scoreLabel.TextColor3 = colors.gold
+	scoreLabel.Font = Enum.Font.Code
+	scoreLabel.TextSize = 16
+	scoreLabel.ZIndex = 104
+	scoreLabel.Parent = window
+	local snake = {{9, 9}, {8, 9}, {7, 9}}
+	local direction = {1, 0}
+	local nextDirection = {1, 0}
+	local food = {13, 9}
+	local objects = {}
+	local timer = 0
+	local score = 0
+	local function draw()
+		for _, object in ipairs(objects) do
+			object:Destroy()
+		end
+		table.clear(objects)
+		for index, segment in ipairs(snake) do
+			table.insert(
+				objects,
+				cell(
+					board,
+					segment[1],
+					segment[2],
+					20,
+					index == 1 and colors.knob or colors.fill
+				)
+			)
+		end
+		table.insert(objects, cell(board, food[1], food[2], 20, colors.red))
+		scoreLabel.Text = "Score: " .. score
+	end
+	local function spawnFood()
+		repeat
+			food = {math.random(1, 18), math.random(1, 18)}
+			local occupied = false
+			for _, segment in ipairs(snake) do
+				if segment[1] == food[1] and segment[2] == food[2] then
+					occupied = true
+				end
+			end
+		until not occupied
+	end
+	UIS.InputBegan:Connect(function(input)
+		if activeGame ~= "Snake" then
+			return
+		end
+		if input.KeyCode == Enum.KeyCode.Up and direction[2] ~= 1 then
+			nextDirection = {0, -1}
+		elseif input.KeyCode == Enum.KeyCode.Down and direction[2] ~= -1 then
+			nextDirection = {0, 1}
+		elseif input.KeyCode == Enum.KeyCode.Left and direction[1] ~= 1 then
+			nextDirection = {-1, 0}
+		elseif input.KeyCode == Enum.KeyCode.Right and direction[1] ~= -1 then
+			nextDirection = {1, 0}
+		end
+	end)
+	draw()
+	activeConnection = RunService.Heartbeat:Connect(function(delta)
+		if activeGame ~= "Snake" then
+			return
+		end
+		timer += delta
+		if timer < 0.13 then
+			return
+		end
+		timer = 0
+		direction = nextDirection
+		local head = snake[1]
+		local newHead = {
+			head[1] + direction[1],
+			head[2] + direction[2],
+		}
+		if newHead[1] < 1 or newHead[1] > 18
+			or newHead[2] < 1 or newHead[2] > 18 then
+			closeGame()
+			return
+		end
+		for _, segment in ipairs(snake) do
+			if segment[1] == newHead[1]
+				and segment[2] == newHead[2] then
+				closeGame()
+				return
+			end
+		end
+		table.insert(snake, 1, newHead)
+		if newHead[1] == food[1] and newHead[2] == food[2] then
+			score += 10
+			spawnFood()
+		else
+			table.remove(snake)
+		end
+		draw()
+	end)
+end
+-- Tetris
+local function openTetris()
+	local window = createGameWindow("Tetris", 470, 520)
+	local board = Instance.new("Frame")
+	board.Size = UDim2.fromOffset(240, 480)
+	board.Position = UDim2.fromOffset(15, 35)
+	board.BackgroundColor3 = colors.bg
+	board.ClipsDescendants = true
+	board.ZIndex = 103
+	board.Parent = window
+	local scoreLabel = Instance.new("TextLabel")
+	scoreLabel.Size = UDim2.fromOffset(180, 30)
+	scoreLabel.Position = UDim2.fromOffset(275, 55)
+	scoreLabel.BackgroundTransparency = 1
+	scoreLabel.TextColor3 = colors.gold
+	scoreLabel.TextSize = 16
+	scoreLabel.Font = Enum.Font.Code
+	scoreLabel.ZIndex = 104
+	scoreLabel.Parent = window
+	local grid = {}
+	for y = 1, 20 do
+		grid[y] = {}
+		for x = 1, 10 do
+			grid[y][x] = false
+		end
+	end
+	local pieces = {
+		{{1, 1, 1, 1}},
+		{{1, 1}, {1, 1}},
+		{{0, 1, 0}, {1, 1, 1}},
+		{{1, 0, 0}, {1, 1, 1}},
+		{{0, 0, 1}, {1, 1, 1}},
+		{{1, 1, 0}, {0, 1, 1}},
+		{{0, 1, 1}, {1, 1, 0}},
+	}
+	local pieceColors = {
+		Color3.fromRGB(70, 190, 210),
+		Color3.fromRGB(235, 215, 65),
+		Color3.fromRGB(170, 75, 200),
+		Color3.fromRGB(70, 110, 220),
+		Color3.fromRGB(230, 125, 50),
+		Color3.fromRGB(65, 180, 90),
+		Color3.fromRGB(215, 65, 75),
+	}
+	local function copyPiece(original)
+		local result = {}
+		for y, row in ipairs(original) do
+			result[y] = {}
+			for x, value in ipairs(row) do
+				result[y][x] = value
+			end
+		end
+		return result
+	end
+	local piece
+	local pieceColor
+	local pieceX = 4
+	local pieceY = 1
+	local objects = {}
+	local score = 0
+	local timer = 0
+	local function canMove(candidate, xPosition, yPosition)
+		for y, row in ipairs(candidate) do
+			for x, value in ipairs(row) do
+				if value == 1 then
+					local boardX = xPosition + x - 1
+					local boardY = yPosition + y - 1
+					if boardX < 1 or boardX > 10 or boardY > 20 then
+						return false
+					end
+					if boardY >= 1 and grid[boardY][boardX] then
+						return false
+					end
+				end
+			end
+		end
+		return true
+	end
+	local function rotate(original)
+		local result = {}
+		for x = 1, #original[1] do
+			result[x] = {}
+			for y = #original, 1, -1 do
+				table.insert(result[x], original[y][x])
+			end
+		end
+		return result
+	end
+	local function draw()
+		for _, object in ipairs(objects) do
+			object:Destroy()
+		end
+		table.clear(objects)
+		for y = 1, 20 do
+			for x = 1, 10 do
+				if grid[y][x] then
+					table.insert(objects, cell(board, x, y, 24, grid[y][x]))
+				end
+			end
+		end
+		if piece then
+			for y, row in ipairs(piece) do
+				for x, value in ipairs(row) do
+					if value == 1 then
+						table.insert(
+							objects,
+							cell(
+								board,
+								pieceX + x - 1,
+								pieceY + y - 1,
+								24,
+								pieceColor
+							)
+						)
+					end
+				end
+			end
+		end
+		scoreLabel.Text = "Score: " .. score
+	end
+	local function clearLines()
+		local lines = 0
+		for y = 20, 1, -1 do
+			local complete = true
+			for x = 1, 10 do
+				if not grid[y][x] then
+					complete = false
+					break
+				end
+			end
+			if complete then
+				table.remove(grid, y)
+				table.insert(grid, 1, {})
+				for x = 1, 10 do
+					grid[1][x] = false
+				end
+				lines += 1
+			end
+		end
+		score += lines * lines * 100
+	end
+	local function spawnPiece()
+		local index = math.random(1, #pieces)
+		piece = copyPiece(pieces[index])
+		pieceColor = pieceColors[index]
+		pieceX = 4
+		pieceY = 1
+	end
+	local function move(dx, dy)
+		if canMove(piece, pieceX + dx, pieceY + dy) then
+			pieceX += dx
+			pieceY += dy
+			draw()
+			return true
+		end
+		return false
+	end
+	local function lockPiece()
+		for y, row in ipairs(piece) do
+			for x, value in ipairs(row) do
+				if value == 1 then
+					grid[pieceY + y - 1][pieceX + x - 1] = pieceColor
+				end
+			end
+		end
+		clearLines()
+		spawnPiece()
+		draw()
+	end
+	UIS.InputBegan:Connect(function(input)
+		if activeGame ~= "Tetris" then
+			return
+		end
+		if input.KeyCode == Enum.KeyCode.Left then
+			move(-1, 0)
+		elseif input.KeyCode == Enum.KeyCode.Right then
+			move(1, 0)
+		elseif input.KeyCode == Enum.KeyCode.Down then
+			if not move(0, 1) then
+				lockPiece()
+			end
+		elseif input.KeyCode == Enum.KeyCode.Up then
+			local rotated = rotate(piece)
+			if canMove(rotated, pieceX, pieceY) then
+				piece = rotated
+				draw()
+			end
+		elseif input.KeyCode == Enum.KeyCode.Space then
+			while move(0, 1) do
+			end
+			lockPiece()
+		end
+	end)
+	spawnPiece()
+	draw()
+	activeConnection = RunService.Heartbeat:Connect(function(delta)
+		if activeGame ~= "Tetris" then
+			return
+		end
+		timer += delta
+		if timer >= 0.65 then
+			timer = 0
+			if not move(0, 1) then
+				lockPiece()
+			end
+		end
+	end)
+end
+hunterToggle.MouseButton1Click:Connect(openHunter)
+snakeToggle.MouseButton1Click:Connect(openSnake)
+tetrisToggle.MouseButton1Click:Connect(openTetris)
+-- Teclas
+UIS.InputBegan:Connect(function(input, processed)
+	if input.KeyCode == Enum.KeyCode.RightShift then
+		state.menuVisible = not state.menuVisible
+		main.Visible = state.menuVisible
+		return
+	end
+	if input.KeyCode == Enum.KeyCode.LeftShift then
+		keys.down = true
+		return
+	end
+	if input.KeyCode == Enum.KeyCode.Space
+		and state.infiniteJump
+		and not state.flying
+		and humanoid then
+		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+	end
+	if processed then
+		return
+	end
+	if input.KeyCode == Enum.KeyCode.W then
+		keys.w = true
+	elseif input.KeyCode == Enum.KeyCode.S then
+		keys.s = true
+	elseif input.KeyCode == Enum.KeyCode.A then
+		keys.a = true
+	elseif input.KeyCode == Enum.KeyCode.D then
+		keys.d = true
+	elseif input.KeyCode == Enum.KeyCode.Space then
+		keys.up = true
+	elseif input.KeyCode == Enum.KeyCode.LeftControl then
+		keys.down = true
+	end
+end)
+UIS.InputEnded:Connect(function(input)
+	if input.KeyCode == Enum.KeyCode.LeftShift then
+		keys.down = false
+	elseif input.KeyCode == Enum.KeyCode.W then
+		keys.w = false
+	elseif input.KeyCode == Enum.KeyCode.S then
+		keys.s = false
+	elseif input.KeyCode == Enum.KeyCode.A then
+		keys.a = false
+	elseif input.KeyCode == Enum.KeyCode.D then
+		keys.d = false
+	elseif input.KeyCode == Enum.KeyCode.Space then
+		keys.up = false
+	elseif input.KeyCode == Enum.KeyCode.LeftControl then
+		keys.down = false
+	end
+end)
+player.CharacterAdded:Connect(function(newCharacter)
+	if state.flying then
+		stopFlying()
+	end
+	setupCharacter(newCharacter)
+	if state.noClip then
+		startNoClip()
+	end
+	if state.esp then
+		task.wait(0.5)
+		refreshESP()
+	end
+end)
+RunService.Heartbeat:Connect(function()
+	if humanoid and humanoid.Parent then
+		humanoid.WalkSpeed = state.walkModifier
+			and math.clamp(state.walkSpeed, 1, 150)
+			or 16
+	end
+end)
