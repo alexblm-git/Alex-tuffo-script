@@ -4,6 +4,41 @@ local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+local oldGui = playerGui:FindFirstChild("TungTungTungSahurHub")
+if oldGui then
+	oldGui:Destroy()
+end
+local oldESP = playerGui:FindFirstChild("PlayerESP")
+if oldESP then
+	oldESP:Destroy()
+end
+for _, object in ipairs(playerGui:GetDescendants()) do
+	if (object:IsA("Folder") and object.Name == "ZXG_ESP")
+		or (object:IsA("BillboardGui")
+			and (
+				object.Name == "Info"
+				or object.Name == "HealthBar"
+				or string.sub(object.Name, 1, 5) == "Info_"
+				or string.sub(object.Name, 1, 7) == "Health_"
+			))
+		or (object:IsA("SelectionBox") and object.Name == "Hitbox") then
+		object:Destroy()
+	end
+end
+for _, targetPlayer in ipairs(Players:GetPlayers()) do
+	local targetCharacter = targetPlayer.Character
+	if targetCharacter then
+		for _, object in ipairs(targetCharacter:GetDescendants()) do
+			if (object:IsA("SelectionBox") and object.Name == "Hitbox")
+				or (object:IsA("BillboardGui")
+					and (object.Name == "Info" or object.Name == "HealthBar"))
+				or (object:IsA("Folder")
+					and string.sub(object.Name, 1, 4) == "ESP_") then
+				object:Destroy()
+			end
+		end
+	end
+end
 local colors = {
 	bg = Color3.fromRGB(13, 24, 36),
 	panel = Color3.fromRGB(17, 31, 45),
@@ -55,6 +90,14 @@ local optimizedObjects = {}
 local espObjects = {}
 local espConnections = {}
 local controls = {}
+local function updateESPTextSizes()
+	for _, esp in pairs(espObjects) do
+		if esp.username and esp.distance then
+			esp.username.TextSize = state.espSize
+			esp.distance.TextSize = state.espSize
+		end
+	end
+end
 local function setupCharacter(newCharacter)
 	character = newCharacter
 	humanoid = character:WaitForChild("Humanoid")
@@ -320,6 +363,7 @@ slider(
 	74,
 	function(value)
 		state.espSize = value
+		updateESPTextSizes()
 	end
 )
 -- Misc
@@ -696,33 +740,40 @@ workspace.DescendantAdded:Connect(function(object)
 	end
 end)
 -- ESP
-local function removeESP(targetPlayer)
-	if espConnections[targetPlayer] then
-		espConnections[targetPlayer]:Disconnect()
-		espConnections[targetPlayer] = nil
+local espFolder = Instance.new("Folder")
+espFolder.Name = "ZXG_ESP"
+espFolder.Parent = playerGui
+local function destroyESP(targetPlayer)
+	local esp = espObjects[targetPlayer]
+	if not esp then
+		return
 	end
-	if espObjects[targetPlayer] then
-		espObjects[targetPlayer]:Destroy()
-		espObjects[targetPlayer] = nil
+	if esp.billboard then
+		esp.billboard:Destroy()
+	end
+	if esp.healthBillboard then
+		esp.healthBillboard:Destroy()
+	end
+	if esp.hitbox then
+		esp.hitbox:Destroy()
+	end
+	espObjects[targetPlayer] = nil
+end
+local function destroyAllESP()
+	for targetPlayer in pairs(espObjects) do
+		destroyESP(targetPlayer)
 	end
 end
-local function createESP(targetPlayer)
-	if targetPlayer == player or not state.esp then
-		return
-	end
-	removeESP(targetPlayer)
-	local targetCharacter = targetPlayer.Character
-	local head = targetCharacter and targetCharacter:FindFirstChild("Head")
-	if not head then
-		return
-	end
+local function makeESP(targetPlayer, targetCharacter, head, targetHumanoid)
 	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "Info_" .. targetPlayer.UserId
 	billboard.Size = UDim2.fromOffset(220, 70)
 	billboard.StudsOffset = Vector3.new(0, 3, 0)
 	billboard.AlwaysOnTop = true
 	billboard.Adornee = head
-	billboard.Parent = head
+	billboard.Parent = espFolder
 	local username = Instance.new("TextLabel")
+	username.Name = "Username"
 	username.Size = UDim2.new(1, 0, 0.5, 0)
 	username.BackgroundTransparency = 1
 	username.Text = targetPlayer.Name
@@ -731,52 +782,132 @@ local function createESP(targetPlayer)
 	username.TextSize = state.espSize
 	username.Font = Enum.Font.Code
 	username.Parent = billboard
-	local distance = username:Clone()
+	local distance = Instance.new("TextLabel")
+	distance.Name = "Distance"
+	distance.Size = UDim2.new(1, 0, 0.5, 0)
 	distance.Position = UDim2.fromScale(0, 0.5)
+	distance.BackgroundTransparency = 1
 	distance.Text = "0 studs"
 	distance.TextColor3 = colors.text
+	distance.TextStrokeTransparency = 0
+	distance.TextSize = state.espSize
+	distance.Font = Enum.Font.Code
 	distance.Parent = billboard
-	espObjects[targetPlayer] = billboard
-	espConnections[targetPlayer] = RunService.RenderStepped:Connect(function()
-		if not state.esp or not billboard.Parent or not head.Parent then
-			removeESP(targetPlayer)
-			return
-		end
-		local studs = rootPart
-			and math.floor((rootPart.Position - head.Position).Magnitude + 0.5)
-			or 0
-		username.TextSize = state.espSize
-		distance.TextSize = state.espSize
-		distance.Text = studs .. " studs"
-	end)
+	local healthBillboard = Instance.new("BillboardGui")
+	healthBillboard.Name = "Health_" .. targetPlayer.UserId
+	healthBillboard.Size = UDim2.fromScale(0.12, 5)
+	healthBillboard.StudsOffset = Vector3.zero
+	healthBillboard.AlwaysOnTop = true
+	healthBillboard.Adornee = targetCharacter:FindFirstChild("HumanoidRootPart")
+	healthBillboard.Parent = espFolder
+	local healthBackground = Instance.new("Frame")
+	healthBackground.Size = UDim2.fromScale(1, 1)
+	healthBackground.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	healthBackground.BorderColor3 = Color3.fromRGB(0, 0, 0)
+	healthBackground.BorderSizePixel = 1
+	healthBackground.Parent = healthBillboard
+	local healthFill = Instance.new("Frame")
+	healthFill.AnchorPoint = Vector2.new(0, 1)
+	healthFill.Position = UDim2.fromScale(0, 1)
+	healthFill.Size = UDim2.fromScale(1, 1)
+	healthFill.BorderSizePixel = 0
+	healthFill.Parent = healthBackground
+	local hitbox = Instance.new("SelectionBox")
+	hitbox.Name = "Hitbox_" .. targetPlayer.UserId
+	hitbox.Adornee = targetCharacter
+	hitbox.LineThickness = 0.04
+	hitbox.Color3 = Color3.fromRGB(255, 40, 40)
+	hitbox.SurfaceTransparency = 1
+	hitbox.Parent = espFolder
+	return {
+		character = targetCharacter,
+		head = head,
+		humanoid = targetHumanoid,
+		billboard = billboard,
+		healthBillboard = healthBillboard,
+		hitbox = hitbox,
+		username = username,
+		distance = distance,
+		healthFill = healthFill,
+	}
 end
-local function refreshESP()
-	for targetPlayer in pairs(espObjects) do
-		removeESP(targetPlayer)
-	end
+local function updateESP()
 	if not state.esp then
+		destroyAllESP()
 		return
 	end
+	local localRoot = character and character:FindFirstChild("HumanoidRootPart")
+	if not localRoot then
+		return
+	end
+	local activePlayers = {}
 	for _, targetPlayer in ipairs(Players:GetPlayers()) do
 		if targetPlayer ~= player then
-			createESP(targetPlayer)
+			local targetCharacter = targetPlayer.Character
+			local head = targetCharacter and targetCharacter:FindFirstChild("Head")
+			local targetRoot = targetCharacter
+				and targetCharacter:FindFirstChild("HumanoidRootPart")
+			local targetHumanoid = targetCharacter
+				and targetCharacter:FindFirstChildOfClass("Humanoid")
+			local esp = espObjects[targetPlayer]
+			if head and targetRoot and targetHumanoid then
+				activePlayers[targetPlayer] = true
+				if not esp or esp.character ~= targetCharacter then
+					destroyESP(targetPlayer)
+					esp = makeESP(
+						targetPlayer,
+						targetCharacter,
+						head,
+						targetHumanoid
+					)
+					espObjects[targetPlayer] = esp
+				end
+				esp.billboard.Adornee = head
+				esp.healthBillboard.Adornee = targetRoot
+				esp.hitbox.Adornee = targetCharacter
+				local characterSize = targetCharacter:GetExtentsSize()
+				esp.healthBillboard.Size = UDim2.fromScale(
+					math.max(characterSize.X * 0.08, 0.08),
+					characterSize.Y
+				)
+				esp.healthBillboard.StudsOffset = Vector3.new(
+					-(characterSize.X * 0.5 + 0.45),
+					0,
+					0
+				)
+				esp.username.TextSize = state.espSize
+				esp.distance.TextSize = state.espSize
+				esp.distance.Text = math.floor(
+					(localRoot.Position - targetRoot.Position).Magnitude + 0.5
+				) .. " studs"
+				local healthRatio = math.clamp(
+					targetHumanoid.Health / math.max(targetHumanoid.MaxHealth, 1),
+					0,
+					1
+				)
+				local healthColor = healthRatio > 0.6
+					and Color3.fromRGB(55, 220, 85)
+					or healthRatio > 0.3
+					and Color3.fromRGB(235, 200, 45)
+					or Color3.fromRGB(230, 45, 45)
+				esp.healthFill.Size = UDim2.fromScale(1, healthRatio)
+				esp.healthFill.BackgroundColor3 = healthColor
+			end
+		end
+	end
+	for targetPlayer in pairs(espObjects) do
+		if not activePlayers[targetPlayer] then
+			destroyESP(targetPlayer)
 		end
 	end
 end
 espToggle.MouseButton1Click:Connect(function()
 	state.esp = not state.esp
 	setToggle(espToggle, "Player ESP", state.esp)
-	refreshESP()
+	updateESP()
 end)
-Players.PlayerAdded:Connect(function(targetPlayer)
-	targetPlayer.CharacterAdded:Connect(function()
-		task.wait(0.5)
-		if state.esp then
-			createESP(targetPlayer)
-		end
-	end)
-end)
-Players.PlayerRemoving:Connect(removeESP)
+Players.PlayerRemoving:Connect(destroyESP)
+RunService.RenderStepped:Connect(updateESP)
 -- Jogos
 local activeGame
 local activeWindow
@@ -1347,10 +1478,6 @@ player.CharacterAdded:Connect(function(newCharacter)
 	setupCharacter(newCharacter)
 	if state.noClip then
 		startNoClip()
-	end
-	if state.esp then
-		task.wait(0.5)
-		refreshESP()
 	end
 end)
 RunService.Heartbeat:Connect(function()
