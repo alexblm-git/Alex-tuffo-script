@@ -143,7 +143,7 @@ gui.ResetOnSpawn = false
 gui.DisplayOrder = 20
 gui.Parent = playerGui
 local main = Instance.new("Frame")
-main.Size = UDim2.fromOffset(350, 450)
+main.Size = UDim2.fromOffset(540, 450)
 main.Position = UDim2.new(0, 30, 0.5, -225)
 main.BackgroundColor3 = colors.bg
 main.BorderColor3 = colors.border
@@ -168,7 +168,7 @@ content.Position = UDim2.fromOffset(6, 76)
 content.BackgroundTransparency = 1
 content.Parent = main
 local pages = {}
-for i = 1, 4 do
+for i = 1, 5 do
 	local page = Instance.new("Frame")
 	page.Size = UDim2.fromScale(1, 1)
 	page.BackgroundTransparency = 1
@@ -178,7 +178,7 @@ for i = 1, 4 do
 end
 local function tab(text, x)
 	local button = Instance.new("TextButton")
-	button.Size = UDim2.fromOffset(78, 26)
+	button.Size = UDim2.fromOffset(100, 26)
 	button.Position = UDim2.fromOffset(x, 0)
 	button.BackgroundColor3 = colors.button
 	button.BorderColor3 = colors.border
@@ -191,9 +191,10 @@ local function tab(text, x)
 end
 local tabButtons = {
 	tab("Main", 0),
-	tab("Visuals", 82),
-	tab("Misc", 164),
-	tab("Jogos", 246),
+	tab("Visuals", 106),
+	tab("Misc", 212),
+	tab("Jogos", 318),
+	tab("Botão misterioso", 424),
 }
 tabButtons[1].BackgroundColor3 = colors.tab
 tabButtons[1].TextColor3 = colors.text
@@ -462,6 +463,12 @@ local tetrisToggle = toggle(pages[4], "Tetris", 102)
 hunterToggle.Text = "Tung the hunter  [OPEN]"
 snakeToggle.Text = "Snake  [OPEN]"
 tetrisToggle.Text = "Tetris  [OPEN]"
+-- Botão misterioso
+section(pages[5], "Botão misterioso", 0)
+local mysteryButton = toggle(pages[5], "Mistério", 30)
+mysteryButton.MouseButton1Click:Connect(function()
+	player:Kick("O mistério foi ativado.")
+end)
 -- Tabs
 local function selectPage(index)
 	for pageIndex, page in ipairs(pages) do
