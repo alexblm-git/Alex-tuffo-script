@@ -12,6 +12,15 @@ local oldESP = playerGui:FindFirstChild("PlayerESP")
 if oldESP then
 	oldESP:Destroy()
 end
+local oldZXGESPs = {}
+for _, object in ipairs(workspace:GetChildren()) do
+	if object:IsA("Folder") and object.Name == "ZXG_ESP" then
+		table.insert(oldZXGESPs, object)
+	end
+end
+for _, object in ipairs(oldZXGESPs) do
+	object:Destroy()
+end
 for _, object in ipairs(playerGui:GetDescendants()) do
 	if (object:IsA("Folder") and object.Name == "ZXG_ESP")
 		or (object:IsA("BillboardGui")
@@ -21,7 +30,20 @@ for _, object in ipairs(playerGui:GetDescendants()) do
 				or string.sub(object.Name, 1, 5) == "Info_"
 				or string.sub(object.Name, 1, 7) == "Health_"
 			))
-		or (object:IsA("SelectionBox") and object.Name == "Hitbox") then
+		or (object:IsA("SelectionBox")
+			and (
+				object.Name == "Hitbox"
+				or string.sub(object.Name, 1, 7) == "Hitbox_"
+			)) then
+		object:Destroy()
+	end
+end
+for _, object in ipairs(workspace:GetDescendants()) do
+	if object:IsA("SelectionBox")
+		and (
+			object.Name == "Hitbox"
+			or string.sub(object.Name, 1, 7) == "Hitbox_"
+		) then
 		object:Destroy()
 	end
 end
@@ -742,20 +764,20 @@ end)
 -- ESP
 local espFolder = Instance.new("Folder")
 espFolder.Name = "ZXG_ESP"
-espFolder.Parent = playerGui
+espFolder.Parent = workspace
 local function destroyESP(targetPlayer)
 	local esp = espObjects[targetPlayer]
 	if not esp then
 		return
 	end
-	if esp.billboard then
-		esp.billboard:Destroy()
-	end
-	if esp.healthBillboard then
-		esp.healthBillboard:Destroy()
-	end
-	if esp.hitbox then
-		esp.hitbox:Destroy()
+	for _, object in ipairs({
+		esp.billboard,
+		esp.healthBillboard,
+		esp.highlight,
+	}) do
+		if object then
+			object:Destroy()
+		end
 	end
 	espObjects[targetPlayer] = nil
 end
@@ -764,7 +786,7 @@ local function destroyAllESP()
 		destroyESP(targetPlayer)
 	end
 end
-local function makeESP(targetPlayer, targetCharacter, head, targetHumanoid)
+local function createESP(targetPlayer, targetCharacter, head, targetRoot, targetHumanoid)
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "Info_" .. targetPlayer.UserId
 	billboard.Size = UDim2.fromOffset(220, 70)
@@ -773,7 +795,6 @@ local function makeESP(targetPlayer, targetCharacter, head, targetHumanoid)
 	billboard.Adornee = head
 	billboard.Parent = espFolder
 	local username = Instance.new("TextLabel")
-	username.Name = "Username"
 	username.Size = UDim2.new(1, 0, 0.5, 0)
 	username.BackgroundTransparency = 1
 	username.Text = targetPlayer.Name
@@ -782,23 +803,17 @@ local function makeESP(targetPlayer, targetCharacter, head, targetHumanoid)
 	username.TextSize = state.espSize
 	username.Font = Enum.Font.Code
 	username.Parent = billboard
-	local distance = Instance.new("TextLabel")
-	distance.Name = "Distance"
-	distance.Size = UDim2.new(1, 0, 0.5, 0)
+	local distance = username:Clone()
 	distance.Position = UDim2.fromScale(0, 0.5)
-	distance.BackgroundTransparency = 1
 	distance.Text = "0 studs"
 	distance.TextColor3 = colors.text
-	distance.TextStrokeTransparency = 0
-	distance.TextSize = state.espSize
-	distance.Font = Enum.Font.Code
 	distance.Parent = billboard
 	local healthBillboard = Instance.new("BillboardGui")
 	healthBillboard.Name = "Health_" .. targetPlayer.UserId
 	healthBillboard.Size = UDim2.fromScale(0.12, 5)
 	healthBillboard.StudsOffset = Vector3.zero
 	healthBillboard.AlwaysOnTop = true
-	healthBillboard.Adornee = targetCharacter:FindFirstChild("HumanoidRootPart")
+	healthBillboard.Adornee = targetRoot
 	healthBillboard.Parent = espFolder
 	local healthBackground = Instance.new("Frame")
 	healthBackground.Size = UDim2.fromScale(1, 1)
@@ -812,20 +827,19 @@ local function makeESP(targetPlayer, targetCharacter, head, targetHumanoid)
 	healthFill.Size = UDim2.fromScale(1, 1)
 	healthFill.BorderSizePixel = 0
 	healthFill.Parent = healthBackground
-	local hitbox = Instance.new("SelectionBox")
-	hitbox.Name = "Hitbox_" .. targetPlayer.UserId
-	hitbox.Adornee = targetCharacter
-	hitbox.LineThickness = 0.04
-	hitbox.Color3 = Color3.fromRGB(255, 40, 40)
-	hitbox.SurfaceTransparency = 1
-	hitbox.Parent = espFolder
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "Hitbox_" .. targetPlayer.UserId
+	highlight.Adornee = targetCharacter
+	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.FillTransparency = 1
+	highlight.OutlineTransparency = 0
+	highlight.OutlineColor = Color3.fromRGB(255, 40, 40)
+	highlight.Parent = espFolder
 	return {
 		character = targetCharacter,
-		head = head,
-		humanoid = targetHumanoid,
 		billboard = billboard,
 		healthBillboard = healthBillboard,
-		hitbox = hitbox,
+		highlight = highlight,
 		username = username,
 		distance = distance,
 		healthFill = healthFill,
@@ -836,7 +850,8 @@ local function updateESP()
 		destroyAllESP()
 		return
 	end
-	local localRoot = character and character:FindFirstChild("HumanoidRootPart")
+	local localRoot = player.Character
+		and player.Character:FindFirstChild("HumanoidRootPart")
 	if not localRoot then
 		return
 	end
@@ -854,17 +869,23 @@ local function updateESP()
 				activePlayers[targetPlayer] = true
 				if not esp or esp.character ~= targetCharacter then
 					destroyESP(targetPlayer)
-					esp = makeESP(
+					esp = createESP(
 						targetPlayer,
 						targetCharacter,
 						head,
+						targetRoot,
 						targetHumanoid
 					)
 					espObjects[targetPlayer] = esp
 				end
 				esp.billboard.Adornee = head
 				esp.healthBillboard.Adornee = targetRoot
-				esp.hitbox.Adornee = targetCharacter
+				esp.highlight.Adornee = targetCharacter
+				esp.username.TextSize = state.espSize
+				esp.distance.TextSize = state.espSize
+				esp.distance.Text = math.floor(
+					(localRoot.Position - targetRoot.Position).Magnitude + 0.5
+				) .. " studs"
 				local characterSize = targetCharacter:GetExtentsSize()
 				esp.healthBillboard.Size = UDim2.fromScale(
 					math.max(characterSize.X * 0.08, 0.08),
@@ -875,23 +896,17 @@ local function updateESP()
 					0,
 					0
 				)
-				esp.username.TextSize = state.espSize
-				esp.distance.TextSize = state.espSize
-				esp.distance.Text = math.floor(
-					(localRoot.Position - targetRoot.Position).Magnitude + 0.5
-				) .. " studs"
 				local healthRatio = math.clamp(
 					targetHumanoid.Health / math.max(targetHumanoid.MaxHealth, 1),
 					0,
 					1
 				)
-				local healthColor = healthRatio > 0.6
+				esp.healthFill.Size = UDim2.fromScale(1, healthRatio)
+				esp.healthFill.BackgroundColor3 = healthRatio > 0.6
 					and Color3.fromRGB(55, 220, 85)
 					or healthRatio > 0.3
 					and Color3.fromRGB(235, 200, 45)
 					or Color3.fromRGB(230, 45, 45)
-				esp.healthFill.Size = UDim2.fromScale(1, healthRatio)
-				esp.healthFill.BackgroundColor3 = healthColor
 			end
 		end
 	end
